@@ -278,10 +278,30 @@ class TSClient:
         )
 
 
-    def get_quotes(self, symbols):
+    # OLD: get_quotes did not accept a per-call timeout, so callers passing
+    # timeout=(connect, read) (e.g. main.py) raised:
+    #   TypeError: get_quotes() got an unexpected keyword argument 'timeout'
+    # (COMMENTED OUT — kept for reference, not deleted)
+    # def get_quotes(self, symbols):
+    #     return self._req(
+    #         requests.get,
+    #         f"{self.base_url}/marketdata/quotes/" + ",".join(symbols)
+    #     )
+
+    # NEW: accept an optional per-call timeout and forward it to _req, mirroring
+    # place_order(). When timeout is None we DO NOT pass it, so _req falls back to
+    # its DEFAULT_TIMEOUT instead of receiving None (which would disable timeout).
+    def get_quotes(self, symbols, timeout=None):
+        url = f"{self.base_url}/marketdata/quotes/" + ",".join(symbols)
+        if timeout is not None:
+            return self._req(
+                requests.get,
+                url,
+                timeout=timeout
+            )
         return self._req(
             requests.get,
-            f"{self.base_url}/marketdata/quotes/" + ",".join(symbols)
+            url
         )
 
 
