@@ -1,0 +1,133 @@
+{
+  "generated_at": "2026-07-04T09:02:08.049613",
+  "files": [
+    {
+      "file": "CREATE_VTBC_SHORTCUTS.ps1",
+      "version": null
+    },
+    {
+      "file": "Rollback_Install.ps1",
+      "version": null
+    },
+    {
+      "file": "Rollback_Install.py",
+      "version": null
+    },
+    {
+      "file": "Update_Install.ps1",
+      "version": null
+    },
+    {
+      "file": "Update_Install.ps1.py",
+      "version": null
+    },
+    {
+      "file": "abort_trading.ps1",
+      "version": null
+    },
+    {
+      "file": "auth_manager.py",
+      "version": "1.0.2"
+    },
+    {
+      "file": "broker_abort_bridge.ps1",
+      "version": null
+    },
+    {
+      "file": "broker_abort_bridge.py",
+      "version": "1.0.0"
+    },
+    {
+      "file": "checksum.py",
+      "version": "1.0.5"
+    },
+    {
+      "file": "config - Copy.py",
+      "version": null
+    },
+    {
+      "file": "config.py",
+      "version": null
+    },
+    {
+      "file": "config_editor.py",
+      "version": "2.0.2"
+    },
+    {
+      "file": "config_gen.py",
+      "version": "1.0.1"
+    },
+    {
+      "file": "config_loader.py",
+      "version": "1.0.1"
+    },
+    {
+      "file": "eligibility_engine.py",
+      "version": "1.5.1"
+    },
+    {
+      "file": "ema_bootstrap.py",
+      "version": "1.1.2"
+    },
+    {
+      "file": "ema_constants.py",
+      "version": "1.0.0"
+    },
+    {
+      "file": "ema_engine.py",
+      "version": "1.2.2"
+    },
+    {
+      "file": "ema_persistence.py",
+      "version": "1.0.5"
+    },
+    {
+      "file": "ema_rebuild.py",
+      "version": "1.1.2"
+    },
+    {
+      "file": "execution_state.py",
+      "version": "1.1.5"
+    },
+    {
+      "file": "installer_source.ps1",
+      "version": null
+    },
+    {
+      "file": "license.py",
+      "version": "1.1.1"
+    },
+    {
+      "file": "main.py",
+      "version": "1.3.3"
+    },
+    {
+      "file": "market_data.py",
+      "version": "1.2.0"
+    },
+    {
+      "file": "order_builder.py",
+      "version": "2.0.0"
+    },
+    {
+      "file": "restore_defaults.py",
+      "version": "2.1.0"
+    },
+    {
+      "file": "trade_conflicts.py",
+      "version": "1.0.0"
+    },
+    {
+      "file": "trade_logger.py",
+      "version": "1.0.2"
+    },
+    {
+      "file": "tradestation_get_refresh_token.py",
+      "version": null
+    },
+    {
+      "file": "ts_client.py",
+      "version": "2.1.1"
+    }
+  ]
+}

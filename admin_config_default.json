@@ -1,0 +1,53 @@
+{
+  "ACCOUNT": {
+    "ACCOUNT_CAPITAL": 10000,
+    "ACCOUNT_ID": 0,
+    "API_KEY": "",
+    "SECRET_TOKEN": "",
+    "REFRESH_TOKEN": "",
+    "ENABLE_LIVE_TRADING": false,
+    "PUSHOVER_USER_KEY": "",
+    "PUSHOVER_API_TOKEN": "",
+    "ADMIN_PUSHOVER_USER_KEY": "uck9cc5jyue5oir91izu2ordr6s4uc",
+    "ADMIN_PUSHOVER_API_TOKEN": "admisid7fij7jfsnc8tavqa1wf2ghi",
+    "PUSHOVER_ENABLED": true,
+    "WINDOWS_ALERT_ENABLED": true
+  },
+  "ORDERS": {
+    "POSITIONS": 1,
+    "MIN_EM": 8,
+    "MAX_PREMIUM": 200,
+    "PROFIT_MULTIPLIER": 1.2,
+    "SPREAD_WIDTH": 10,
+    "SLIPPAGE": 0.05,
+    "BID_ASK_SPREAD": 2,
+    "STRIKE_STEP": 5,
+    "STRIKE_RANGE": 3,
+    "MAX_CALLS_ACTIVE": 2,
+    "MAX_PUTS_ACTIVE": 2
+  },
+  "TIMING": {
+    "MARKET_OPEN_TIME": "09:30:00",
+    "TRADE_START_TIME": "10:00:00",
+    "STOP_NEW_ENTRIES": "14:30:00",
+    "FORCE_EXIT_TIME": "14:45:00",
+    "FORCE_EXIT_ENABLED": true,
+    "ORDER_TIMEOUT": 180,
+    "LOOP": 2
+  },
+  "EMA": {
+    "NOISE_3_5": 0.25,
+    "NOISE_5_20": 0.25,
+    "EMA20_ADJUSTMENT": 0,
+    "EMA_MAX_STALENESS_DAYS": 1,
+    "EMA_FILE": "ema_state.json",
+    "EMA_REBUILD_DEPTH": 120
+  },
+  "RETRIES": {
+    "ORDER_RETRY_ATTEMPTS": 3,
+    "TOKEN_REFRESH_DELAY": 1,
+    "DATA_RETRY_ATTEMPTS": 3,
+    "DATA_RETRY_DELAY": 0.5,
+    "MAX_API_FAILURES": 5
+  }
+}
