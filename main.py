@@ -1,30 +1,6 @@
 # main.py
 # NEW: Device-ID auth + EXE checksum enforcement (startup + 09:00 ET M-F)
-__version__ = "1.4.4"
-# OLD VERSION (COMMENTED OUT): old___version__ = "1.3.1"
-
-# Ensure merged config.py exists before importing modules that expect flat config constants
-# DISABLED: config.py is always provided in the root directory.
-# try:
-#     from config_gen import generate_config_py
-#     generate_config_py()
-# except Exception as e:
-#     print(f"Warning: failed to generate config.py at startup: {e}")
-
-# Optional non-fatal assertion to detect drift between merged JSON and generated config.py
-# DISABLED PER REQUEST
-# try:
-#     if load_merged_config is not None:
-#         merged = load_merged_config()
-#         if getattr(_cfg, "CONFIG", None) != merged:
-#             print("Warning: provided config.py differs from merged config.json + admin defaults.")
-# except Exception:
-#     pass
-# OBSOLETE PER REQUEST: runtime merged config loading disabled; config.py is single source of truth.
-# try:
-#     from config_loader import load_merged_config
-# except Exception:
-#     load_merged_config = None
+__version__ = "1.6.0"
 
 import math
 import time
@@ -36,6 +12,7 @@ import os
 import json
 import hashlib
 import importlib.util
+import csv
 # NEW IMPORTS FOR DEVICE ID
 import subprocess
 import uuid
@@ -59,6 +36,7 @@ required_config_keys = [
     "API_KEY",
     "REFRESH_TOKEN",
     "ACCOUNT_ID",
+    "SECRET_TOKEN",
     "ENABLE_LIVE_TRADING",
     "PUSHOVER_USER_KEY",
     "PUSHOVER_API_TOKEN",
@@ -115,19 +93,7 @@ POSITIONS = _cfg.POSITIONS
 ACCOUNT_CAPITAL = _cfg.ACCOUNT_CAPITAL
 MAX_CALLS_ACTIVE = _cfg.MAX_CALLS_ACTIVE
 MAX_PUTS_ACTIVE = _cfg.MAX_PUTS_ACTIVE
-
-# OBSOLETE PER REQUEST: merged config extras disabled.
-# # NEW: Load PROFIT_MULTIPLIER and retry config from merged config
-# # Falls back to defaults if config_loader is unavailable or key is absent.
-# try:
-#     _merged_cfg = load_merged_config() if load_merged_config else {}
-#     PROFIT_MULTIPLIER = _merged_cfg.get("PROFIT_MULTIPLIER", 1.2)
-#     ORDER_RETRY_ATTEMPTS = _merged_cfg.get("ORDER_RETRY_ATTEMPTS", 3)
-#     TOKEN_REFRESH_DELAY = _merged_cfg.get("TOKEN_REFRESH_DELAY", 1)
-# except Exception:
-#     PROFIT_MULTIPLIER = 1.2
-#     ORDER_RETRY_ATTEMPTS = 3
-#     TOKEN_REFRESH_DELAY = 1
+SECRET_TOKEN = _cfg.SECRET_TOKEN
 
 # UPDATED PER REQUEST: read directly from config.py (_cfg) with safe fallbacks.
 PROFIT_MULTIPLIER = getattr(_cfg, "PROFIT_MULTIPLIER", 1.2)
@@ -155,6 +121,77 @@ from license import check_license
 from ema_bootstrap import initialize_ema_engine
 from ema_persistence import save_ema_state
 from ema_constants import EMA3_SECONDS, EMA5_SECONDS, EMA20_SECONDS
+
+
+# ===== DEBUG CSV LOGGING =====
+DEBUG_CSV_PATH = os.path.join(APP_DIR, "debug_output.csv")
+DEBUG_CSV_COLUMNS = [
+    "event code",
+    "time",
+    "spx",
+    "ema3",
+    "ema5",
+    "ema20",
+    "em",
+    "mid",
+    "rejection reason",
+    "direction (c or p)",
+    "long leg",
+    "short leg",
+    "transaction type (buy or sell)",
+    "premium",
+    "cooldown",
+]
+
+def _init_debug_csv():
+    try:
+        if not os.path.exists(DEBUG_CSV_PATH):
+            with open(DEBUG_CSV_PATH, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=DEBUG_CSV_COLUMNS)
+                writer.writeheader()
+    except Exception as e:
+        print(f"[DEBUG CSV] init failed: {e}")
+
+def _debug_csv_row(
+    event_code="",
+    now=None,
+    spx=None,
+    ema3=None,
+    ema5=None,
+    ema20=None,
+    em=None,
+    mid=None,
+    rejection_reason="",
+    direction="",
+    long_leg=None,
+    short_leg=None,
+    tx_type="",
+    premium=None,
+    cooldown=None,
+):
+    try:
+        row = {
+            "event code": event_code,
+            "time": now.strftime("%H:%M:%S") if now else "",
+            "spx": spx if spx is not None else "",
+            "ema3": ema3 if ema3 is not None else "",
+            "ema5": ema5 if ema5 is not None else "",
+            "ema20": ema20 if ema20 is not None else "",
+            "em": em if em is not None else "",
+            "mid": mid if mid is not None else "",
+            "rejection reason": rejection_reason,
+            "direction (c or p)": direction,
+            "long leg": long_leg if long_leg is not None else "",
+            "short leg": short_leg if short_leg is not None else "",
+            "transaction type (buy or sell)": tx_type,
+            "premium": premium if premium is not None else "",
+            "cooldown": cooldown if cooldown is not None else "",
+        }
+        with open(DEBUG_CSV_PATH, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=DEBUG_CSV_COLUMNS)
+            writer.writerow(row)
+    except Exception as e:
+        print(f"[DEBUG CSV] write failed: {e}")
 
 
 class SymbolProbeError(RuntimeError):  #1
@@ -325,20 +362,8 @@ def fatal_exit(reason, alert_user=True, alert_admin=True):
 # ===== UNAUTHORIZED HANDLER (UPDATED TO DEVICE ID) =====
 def handle_unauthorized():
 
-    # OLD USER ID LOGIC (COMMENTED OUT)
-    # user_id = socket.gethostname()
-    # NEW DEVICE ID LOGIC
     device_id = get_device_id()
 
-    # OLD MESSAGE (COMMENTED OUT)
-    # msg = f"""
-    # VTBC NOT AUTHORIZED
-    #
-    # User ID:
-    # {user_id}
-    #
-    # Contact administrator for access.
-    # """
     msg = f"""
 VTBC NOT AUTHORIZED
 
@@ -355,8 +380,6 @@ Contact administrator for access.
     except:
         pass
 
-    # OLD ALERT FORMAT (COMMENTED OUT)
-    # send_admin_alert(f"UNAUTHORIZED ACCESS ATTEMPT\nUser ID: {user_id}")
     send_admin_alert(f"UNAUTHORIZED ACCESS ATTEMPT\nDevice ID: {device_id}")
 
 
@@ -438,10 +461,10 @@ def validate_credentials():
     if not REFRESH_TOKEN or REFRESH_TOKEN == "YOUR_REFRESH_TOKEN":
         missing.append("REFRESH_TOKEN")
 
-    # CLIENT_SECRET required for TradeStation OAuth
-    client_secret = getattr(_cfg, "CLIENT_SECRET", None)
+  
+    client_secret = getattr(_cfg, "SECRET_TOKEN", None)
     if not client_secret or client_secret == "YOUR_CLIENT_SECRET":
-        missing.append("CLIENT_SECRET")
+        missing.append("SECRET_TOKEN")
 
     if not ACCOUNT_ID:
         missing.append("ACCOUNT_ID")
@@ -478,23 +501,6 @@ def run_system_validation(spx_price=None, send_notifications=False):
 
     # DISABLED PER REQUEST: manifest/build-time validation should not run at runtime.
     # run_build_check()
-
-    # OBSOLETE PER REQUEST: runtime EXE integrity check removed from run_system_validation()
-    # to avoid duplicate startup checksum execution.
-    # Runtime integrity is enforced at:
-    # 1) startup before run_system_validation(), and
-    # 2) daily 09:00 weekday check in main loop.
-    # integrity_ok, failing_exe, reason = verify_runtime_exe_checksums()
-    # if not integrity_ok:
-    #     user_msg = f"Data corruption in {failing_exe}.  Trading suspended"
-    #     device_id = get_device_id()
-    #     admin_msg = f"{user_msg}\nCorruption found on computer '{device_id}'"
-    #     try:
-    #         log_event("SYSTEM_VALIDATION_FAIL", spx_price, None, None, None, details=reason)
-    #     except Exception:
-    #         pass
-    #     send_admin_alert(admin_msg)
-    #     fatal_exit(user_msg)
 
     # All checks passed
     try:
@@ -788,18 +794,30 @@ def handle_force_exit(client, state, now, spx_price):
                 _place_force_exit_conversion(client, pos, limit_price, spx_price, "T0", time_str)
 
 
+# NEW: Q4 reject cooldown helper
+def _q4_cooldown_seconds(mid_minus_cap):
+    """
+    mid_minus_cap = mid - premium_cap (positive means over cap).
+    Rules:
+      <= 0.50  -> 10s
+      <= 1.00  -> 15s
+      > 1.00   -> 20s
+    """
+    if mid_minus_cap <= 0.50:
+        return 10
+    if mid_minus_cap <= 1.00:
+        return 15
+    return 20
+
+
 # ===== MAIN =====
 if __name__ == "__main__":
+
+    _init_debug_csv()
 
     last_validation_date = None
     # NEW: track one runtime integrity check per weekday date at 09:00
     last_integrity_check_date = None
-
-    # SURGICAL CHECKSUM VERIFICATION INSERTION
-    # DISABLED PER REQUEST: checksums.json is no longer used.
-    # install_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
-    # checksums_path = os.path.join(install_dir, "checksums.json")
-    # verify_distribution_checksums(checksums_path, install_dir, fail_on_mismatch=False)
 
     # NEW: REQUIRED runtime EXE checksum check at startup (root dir vs cs.json)
     ok, failing_exe, reason = verify_runtime_exe_checksums()
@@ -812,14 +830,9 @@ if __name__ == "__main__":
         )
 
     validate_credentials()
-    run_system_validation(send_notifications=True)
+    # run_system_validation(send_notifications=True)
+    run_system_validation(send_notifications=False)
 
-    # OLD EMA INITIALIZATION (COMMENTED OUT)
-    # ema_engine = EMAEngine([EMA3_SECONDS, EMA5_SECONDS, EMA20_SECONDS])
-    # OLD: client always defaulted to SIM because `live` was never passed (COMMENTED OUT)
-    # client = TSClient(API_KEY, REFRESH_TOKEN, ACCOUNT_ID)
-    # NEW: route order endpoints by the flag.
-    #   ENABLE_LIVE_TRADING = True  -> trades sent to the LIVE trading URL
     #   ENABLE_LIVE_TRADING = False -> the SAME trades sent to the SIM trading URL
     try:
         client = TSClient(API_KEY, REFRESH_TOKEN, ACCOUNT_ID, live=ENABLE_LIVE_TRADING)
@@ -832,27 +845,15 @@ if __name__ == "__main__":
     debug_loop_counter = 0
     DEBUG_EVERY_N_LOOPS = 1  # VTBC_DEBUG_TAG: TEMP high-visibility, set back to 30 after debugging
 
-    expiry = get_today_expiry()
+    # NEW: Q4 rejection cooldown control
+    next_q4_check_ts = 0.0  # epoch seconds; gates new entry evaluation after Q4 reject
 
-    # OLD TEST/PROBE SYMBOL LOGIC (COMMENTED OUT) #1
-    # direction_symbol = "SPX"  #1
-    # try:  #1
-    #     direction_symbol = choose_direction_symbol(client)  #1
-    #     print(f"[INIT] Direction symbol resolved to: {direction_symbol}")  #1
-    # except SymbolProbeError as e:  #1
-    #     print(f"[INIT] Symbol probe failed, defaulting to SPX: {e}")  #1
+    expiry = get_today_expiry()
 
     # NEW: fixed production symbols per TradeStation
     direction_symbol = "$SPX.X"
     weekly_options_symbol = "$SPXW.X"  # reserved for weekly options data path
 
-    # OLD REBUILD LOGIC (COMMENTED OUT)
-    # prices = get_minute_prices_for_rebuild(client, expiry)
-    # rebuild_emas(ema_engine, prices)
-
-    # NEW BOOTSTRAP INITIALIZATION
-    # ema_engine = initialize_ema_engine(client, expiry, direction_symbol)  #2
-    # UPDATED PER REQUEST: pass configurable EMA_REBUILD_DEPTH (default 120)
     print(f"[BOOTSTRAP] Initializing EMA engine (symbol={direction_symbol}, depth={EMA_REBUILD_DEPTH})")
     ema_engine = initialize_ema_engine(client, expiry, direction_symbol, EMA_REBUILD_DEPTH)
     print("[BOOTSTRAP] EMA engine initialized successfully")
@@ -872,7 +873,8 @@ if __name__ == "__main__":
             if now.strftime("%H:%M") == "09:00":
                 if last_validation_date != today:
                     print("\n=== DAILY VALIDATION ===")
-                    run_system_validation(send_notifications=True)
+                    # run_system_validation(send_notifications=True)
+                    run_system_validation(send_notifications=False)
                     last_validation_date = today
 
             # NEW: Daily runtime EXE checksum at 09:00 ET, Monday-Friday only
@@ -890,8 +892,17 @@ if __name__ == "__main__":
                         )
                     last_integrity_check_date = today
 
+            # HARD API WINDOW GUARD (no requests before 09:30 or after 16:10)
+            if time_str < "09:30:00" or time_str > "16:10:00":
+                _debug_csv_row(
+                    event_code="OUTSIDE_API_WINDOW",
+                    now=now,
+                    rejection_reason=f"No API requests outside 09:30-16:10 (now={time_str})",
+                )
+                time.sleep(LOOP)
+                continue
+
             # ===== FORCE EXIT =====
-            # Replaces the old single-order cancel stub.
             # Handles all active positions independently across T+0, T+15, T+30 stages.
             if FORCE_EXIT_ENABLED:
                 t0, _, _ = _parse_force_exit_thresholds()
@@ -902,28 +913,31 @@ if __name__ == "__main__":
 
             allow_entries = not (time_str < TRADE_START_TIME or time_str >= STOP_NEW_ENTRIES)
 
-            # OLD TEST SYMBOL FETCH (COMMENTED OUT) #2
-            # spx_data = client.get_quotes([direction_symbol])  #2
-            # if not spx_data or "Quotes" not in spx_data or not spx_data["Quotes"]:  #2
-
             # VTBC_DEBUG_TAG: hard timeout at call site
             print(f"[VTBC_DEBUG_TAG][QUOTE_REQ] requesting {direction_symbol} timeout=(2.0, 3.0)")
             spx_data = client.get_quotes([direction_symbol], timeout=(2.0, 3.0))
             if not spx_data or "Quotes" not in spx_data or not spx_data["Quotes"]:
                 print(f"[DATA] No index quote returned for {direction_symbol} at {time_str}")
+                _debug_csv_row(
+                    event_code="REJECT_QUOTE_EMPTY",
+                    now=now,
+                    rejection_reason=f"No index quote returned for {direction_symbol}",
+                )
                 # VTBC_DEBUG_TAG
                 print(f"[VTBC_DEBUG_TAG][QUOTE_EMPTY] skipping loop at {time_str}")
                 time.sleep(LOOP)
                 continue
 
             try:
-                # OLD TEST PRICE PARSE (COMMENTED OUT) #2
-                # spx_price = float(spx_data["Quotes"][0]["Last"])  #2
                 spx_price = float(spx_data["Quotes"][0]["Last"])
-                # VTBC_DEBUG_TAG
                 print(f"[VTBC_DEBUG_TAG][SPX_LAST] t={time_str} {direction_symbol} last={spx_price}")
             except Exception as e:
                 print(f"[DATA] Failed to parse {direction_symbol} Last at {time_str}: {e}")
+                _debug_csv_row(
+                    event_code="REJECT_SPX_PARSE",
+                    now=now,
+                    rejection_reason=f"Failed to parse {direction_symbol} Last: {e}",
+                )
                 time.sleep(LOOP)
                 continue
 
@@ -932,6 +946,12 @@ if __name__ == "__main__":
             surface = get_atm_surface(client, expiry, spx_price)
             if not surface or "atm" not in surface:
                 print(f"[VTBC_DEBUG_TAG][ATM_SURFACE_FAIL] invalid surface={surface}")
+                _debug_csv_row(
+                    event_code="REJECT_ATM_SURFACE",
+                    now=now,
+                    spx=spx_price,
+                    rejection_reason=f"Invalid surface: {surface}",
+                )
                 time.sleep(LOOP)
                 continue
 
@@ -968,14 +988,56 @@ if __name__ == "__main__":
                     f"[REJECT SIGNAL] No directional signal "
                     f"(trade=None) at {time_str} spx={spx_price}"
                 )
+                _debug_csv_row(
+                    event_code="REJECT_SIGNAL",
+                    now=now,
+                    spx=spx_price,
+                    ema3=ema3_dbg,
+                    ema5=ema5_dbg,
+                    ema20=ema20_dbg,
+                    rejection_reason="No directional signal",
+                )
 
             # NEW: explicit gating visibility before entry block
             if trade and state.state != State.IDLE and (debug_loop_counter % DEBUG_EVERY_N_LOOPS == 0):
                 print(f"[REJECT GATE] state not IDLE (state={state.state})")
+                _debug_csv_row(
+                    event_code="REJECT_GATE_STATE",
+                    now=now,
+                    spx=spx_price,
+                    ema3=ema3_dbg,
+                    ema5=ema5_dbg,
+                    ema20=ema20_dbg,
+                    rejection_reason=f"state not IDLE ({state.state})",
+                )
             if trade and state.state == State.IDLE and not allow_entries and (debug_loop_counter % DEBUG_EVERY_N_LOOPS == 0):
                 print(
                     f"[REJECT GATE] outside entry window now={time_str} "
                     f"window={TRADE_START_TIME}->{STOP_NEW_ENTRIES}"
+                )
+                _debug_csv_row(
+                    event_code="REJECT_GATE_WINDOW",
+                    now=now,
+                    spx=spx_price,
+                    ema3=ema3_dbg,
+                    ema5=ema5_dbg,
+                    ema20=ema20_dbg,
+                    rejection_reason=f"outside entry window {TRADE_START_TIME}->{STOP_NEW_ENTRIES}",
+                )
+
+            # NEW: explicit Q4 cooldown visibility
+            if trade and state.state == State.IDLE and allow_entries and time.time() < next_q4_check_ts:
+                remaining = max(0.0, next_q4_check_ts - time.time())
+                print(f"[ENTRY COOLDOWN] Q4 cooldown active, {remaining:.1f}s remaining")
+                _debug_csv_row(
+                    event_code="REJECT_Q4_COOLDOWN",
+                    now=now,
+                    spx=spx_price,
+                    ema3=ema3_dbg,
+                    ema5=ema5_dbg,
+                    ema20=ema20_dbg,
+                    rejection_reason="Q4 cooldown active",
+                    cooldown=round(remaining, 1),
                 )
 
             # Handle long entry order: poll for fill or timeout
@@ -1005,6 +1067,16 @@ if __name__ == "__main__":
                             filled_qty
                         )
                         log_event("ORDER_FILLED", spx_price, filled_direction, filled_long_strike, None, order_id=state.order_id)
+                        _debug_csv_row(
+                            event_code="ORDER_FILLED",
+                            now=now,
+                            spx=spx_price,
+                            direction=(filled_direction or "").lower(),
+                            long_leg=filled_long_strike,
+                            short_leg=filled_short_strike,
+                            tx_type="buy",
+                            premium=filled_entry_price,
+                        )
 
                         # Place conversion order to complete the butterfly.
                         # Sells the shared short strike and buys a far wing at
@@ -1052,6 +1124,15 @@ if __name__ == "__main__":
                                 SPREAD_WIDTH,
                                 order_id=conv_oid
                             )
+                            _debug_csv_row(
+                                event_code="CONVERSION_PLACED",
+                                now=now,
+                                spx=spx_price,
+                                direction=(filled_direction or "").lower(),
+                                short_leg=filled_short_strike,
+                                tx_type="sell",
+                                premium=conversion_limit,
+                            )
                         else:
                             err_detail = str(last_conv_error) if last_conv_error else "no order ID returned"
                             print(f"[{time_str}] Conversion order FAILED after {ORDER_RETRY_ATTEMPTS} attempts: {err_detail} — reverting to IDLE")
@@ -1071,6 +1152,16 @@ if __name__ == "__main__":
                                 filled_short_strike,
                                 SPREAD_WIDTH
                             )
+                            _debug_csv_row(
+                                event_code="CONVERSION_FAILED",
+                                now=now,
+                                spx=spx_price,
+                                direction=(filled_direction or "").lower(),
+                                short_leg=filled_short_strike,
+                                tx_type="sell",
+                                premium=conversion_limit,
+                                rejection_reason=err_detail,
+                            )
                             state.state = State.IDLE
 
                     elif check_result == "CANCEL":
@@ -1081,6 +1172,14 @@ if __name__ == "__main__":
                             print(f"Cancel failed: {e}")
                         state.state = State.IDLE
                         log_event("ORDER_TIMEOUT", spx_price, state.direction, state.short_strike, None, order_id=state.order_id)
+                        _debug_csv_row(
+                            event_code="ORDER_TIMEOUT",
+                            now=now,
+                            spx=spx_price,
+                            direction=(state.direction or "").lower(),
+                            short_leg=state.short_strike,
+                            rejection_reason="Long order timeout",
+                        )
 
                 except Exception as e:
                     print(f"Error checking long order status: {e}")
@@ -1105,6 +1204,14 @@ if __name__ == "__main__":
                             SPREAD_WIDTH,
                             order_id=state.order_id
                         )
+                        _debug_csv_row(
+                            event_code="CONVERSION_FILLED",
+                            now=now,
+                            spx=spx_price,
+                            direction=(state.direction or "").lower(),
+                            short_leg=state.short_strike,
+                            tx_type="sell",
+                        )
                         state.state = State.IDLE
 
                     elif datetime.now() >= state.deadline:
@@ -1121,6 +1228,15 @@ if __name__ == "__main__":
                             SPREAD_WIDTH,
                             order_id=state.order_id
                         )
+                        _debug_csv_row(
+                            event_code="CONVERSION_TIMEOUT",
+                            now=now,
+                            spx=spx_price,
+                            direction=(state.direction or "").lower(),
+                            short_leg=state.short_strike,
+                            tx_type="sell",
+                            rejection_reason="Conversion timeout",
+                        )
                         state.state = State.IDLE
 
                 except Exception as e:
@@ -1131,6 +1247,7 @@ if __name__ == "__main__":
                 trade
                 and state.state == State.IDLE
                 and allow_entries
+                and time.time() >= next_q4_check_ts
                 # OLD: ENABLE_LIVE_TRADING blocked the trade entirely when False (COMMENTED OUT)
                 # and ENABLE_LIVE_TRADING
                 # NEW: trades are ALWAYS placed when qualified; ENABLE_LIVE_TRADING only
@@ -1159,6 +1276,15 @@ if __name__ == "__main__":
                         f"[REJECT Q0] No ATM option quote "
                         f"(dir={direction} expiry={expiry} atm={atm})"
                     )
+                    _debug_csv_row(
+                        event_code="REJECT_Q0_NO_ATM_QUOTE",
+                        now=now,
+                        spx=spx_price,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason="No ATM option quote",
+                    )
                     time.sleep(LOOP)
                     continue
 
@@ -1166,6 +1292,16 @@ if __name__ == "__main__":
                     print(
                         f"[REJECT Q0] EM below threshold "
                         f"(mid={atm_option['mid']} MIN_EM={MIN_EM})"
+                    )
+                    _debug_csv_row(
+                        event_code="REJECT_Q0_MIN_EM",
+                        now=now,
+                        spx=spx_price,
+                        em=atm_option["mid"],
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"EM below threshold (mid={atm_option['mid']} MIN_EM={MIN_EM})",
                     )
                     time.sleep(LOOP)
                     continue
@@ -1176,12 +1312,30 @@ if __name__ == "__main__":
                         f"[REJECT Q1] Max active CALLS reached "
                         f"({state.count_active('C')}/{MAX_CALLS_ACTIVE})"
                     )
+                    _debug_csv_row(
+                        event_code="REJECT_Q1_MAX_CALLS",
+                        now=now,
+                        spx=spx_price,
+                        direction="c",
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"Max active CALLS reached ({state.count_active('C')}/{MAX_CALLS_ACTIVE})",
+                    )
                     time.sleep(LOOP)
                     continue
                 if direction == "P" and state.count_active("P") >= MAX_PUTS_ACTIVE:
                     print(
                         f"[REJECT Q1] Max active PUTS reached "
                         f"({state.count_active('P')}/{MAX_PUTS_ACTIVE})"
+                    )
+                    _debug_csv_row(
+                        event_code="REJECT_Q1_MAX_PUTS",
+                        now=now,
+                        spx=spx_price,
+                        direction="p",
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"Max active PUTS reached ({state.count_active('P')}/{MAX_PUTS_ACTIVE})",
                     )
                     time.sleep(LOOP)
                     continue
@@ -1200,6 +1354,15 @@ if __name__ == "__main__":
                         f"[REJECT Q2] Strike conflict "
                         f"(dir={direction} proposed={proposed} width={SPREAD_WIDTH})"
                     )
+                    _debug_csv_row(
+                        event_code="REJECT_Q2_CONFLICT",
+                        now=now,
+                        spx=spx_price,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"Strike conflict proposed={proposed}",
+                    )
                     time.sleep(LOOP)
                     continue
 
@@ -1210,6 +1373,15 @@ if __name__ == "__main__":
                         f"[REJECT Q3] No spread quote "
                         f"(dir={direction} expiry={expiry} long={long_strike} short={short_strike})"
                     )
+                    _debug_csv_row(
+                        event_code="REJECT_Q3_NO_SPREAD_QUOTE",
+                        now=now,
+                        spx=spx_price,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason="No spread quote",
+                    )
                     time.sleep(LOOP)
                     continue
 
@@ -1219,36 +1391,62 @@ if __name__ == "__main__":
                         f"[REJECT Q3] Bid/ask width too wide "
                         f"(width={bid_ask_width} threshold={BID_ASK_SPREAD})"
                     )
+                    _debug_csv_row(
+                        event_code="REJECT_Q3_WIDE_BIDASK",
+                        now=now,
+                        spx=spx_price,
+                        mid=spread_quote.get("mid"),
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"Bid/ask width too wide (width={bid_ask_width} threshold={BID_ASK_SPREAD})",
+                    )
                     time.sleep(LOOP)
                     continue
 
                 mid = spread_quote["mid"]
                 if mid <= 0:
                     print(f"[REJECT Q4] Invalid spread mid (mid={mid})")
+                    _debug_csv_row(
+                        event_code="REJECT_Q4_INVALID_MID",
+                        now=now,
+                        spx=spx_price,
+                        mid=mid,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        rejection_reason=f"Invalid spread mid (mid={mid})",
+                    )
                     time.sleep(LOOP)
                     continue
 
-                # OBSOLETE PER REQUEST:
-                # MAX_PREMIUM is in cents (e.g., 200 = $2.00/share).
-                # Calls: cap = (MAX_PREMIUM / 100) + SLIPPAGE  (buying, slippage adds to cost)
-                # Puts:  cap = (MAX_PREMIUM / 100) - SLIPPAGE  (selling premium, slippage reduces proceeds)
-                # if direction == "C":
-                #     premium_cap = (MAX_PREMIUM / 100) + SLIPPAGE
-                # else:
-                #     premium_cap = (MAX_PREMIUM / 100) - SLIPPAGE
-                #
-                # # Strictly less than cap per strategy rule.
-                # if mid >= premium_cap:
-                #     time.sleep(LOOP)
-                #     continue
 
                 # UPDATED PER REQUEST:
                 # Spread mid + SLIPPAGE < MAX_PREMIUM/100 for both calls and puts.
                 premium_cap = (MAX_PREMIUM / 100)
                 if (mid + SLIPPAGE) >= premium_cap:
+                    mid_minus_cap = max(0.0, mid - premium_cap)
+                    cd = _q4_cooldown_seconds(mid_minus_cap)
+                    next_q4_check_ts = time.time() + cd
                     print(
                         f"[REJECT Q4] Premium cap fail "
-                        f"(mid={mid} slippage={SLIPPAGE} cap={premium_cap})"
+                        f"(mid={mid} slippage={SLIPPAGE} cap={premium_cap} "
+                        f"mid-cap={mid_minus_cap:.2f} cooldown={cd}s)"
+                    )
+                    _debug_csv_row(
+                        event_code="REJECT_Q4_PREMIUM_CAP",
+                        now=now,
+                        spx=spx_price,
+                        mid=mid,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        premium=round(mid + SLIPPAGE, 2),
+                        cooldown=cd,
+                        rejection_reason=(
+                            f"Premium cap fail (mid={mid} slippage={SLIPPAGE} cap={premium_cap} "
+                            f"mid-cap={mid_minus_cap:.2f} cooldown={cd}s)"
+                        ),
                     )
                     time.sleep(LOOP)
                     continue
@@ -1293,8 +1491,33 @@ if __name__ == "__main__":
                         SPREAD_WIDTH,
                         order_id=oid
                     )
+                    _debug_csv_row(
+                        event_code="ENTRY_PLACED",
+                        now=now,
+                        spx=spx_price,
+                        em=atm_option["mid"] if atm_option else None,
+                        mid=mid,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        tx_type="buy",
+                        premium=limit_price,
+                    )
                 else:
                     print("[ENTRY FAIL] place_order returned no order ID")
+                    _debug_csv_row(
+                        event_code="ENTRY_FAIL_NO_ORDER_ID",
+                        now=now,
+                        spx=spx_price,
+                        em=atm_option["mid"] if atm_option else None,
+                        mid=mid,
+                        direction=direction.lower(),
+                        long_leg=long_strike,
+                        short_leg=short_strike,
+                        tx_type="buy",
+                        premium=limit_price,
+                        rejection_reason="place_order returned no order ID",
+                    )
 
             # VTBC_DEBUG_TAG
             print(f"[VTBC_DEBUG_TAG][LOOP_SLEEP] sleeping {LOOP}s")
