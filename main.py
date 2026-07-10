@@ -1,6 +1,6 @@
 # main.py
 # NEW: Device-ID auth + EXE checksum enforcement (startup + 09:00 ET M-F)
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 
 import math
 import time
