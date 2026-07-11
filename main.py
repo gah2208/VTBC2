@@ -124,9 +124,7 @@ from ema_constants import EMA3_SECONDS, EMA5_SECONDS, EMA20_SECONDS
 
 
 # ===== DEBUG CSV LOGGING =====
-DEBUG_CSV_DEFAULT_PATH = os.path.join(APP_DIR, "debug_output.csv")
-DEBUG_CSV_DESKTOP_PATH = os.path.join(os.path.expanduser("~"), "Desktop", "debug_output.csv")
-DEBUG_CSV_PATH = DEBUG_CSV_DESKTOP_PATH
+DEBUG_CSV_PATH = os.path.join(os.path.expanduser("~"), "Desktop", "debug_output.csv")
 DEBUG_CSV_COLUMNS = [
     "event code",
     "time",
@@ -145,27 +143,21 @@ DEBUG_CSV_COLUMNS = [
     "cooldown",
 ]
 
-print(f"[DEBUG CSV] APP_DIR={APP_DIR}")
-print(f"[DEBUG CSV] DEFAULT_PATH={DEBUG_CSV_DEFAULT_PATH}")
-print(f"[DEBUG CSV] DESKTOP_PATH={DEBUG_CSV_DESKTOP_PATH}")
-print(f"[DEBUG CSV] ACTIVE_PATH={DEBUG_CSV_PATH}")
-
 def _init_debug_csv():
+    print(f"[DEBUG CSV] target path: {DEBUG_CSV_PATH}")
     try:
-        print(f"[DEBUG CSV] init starting for {DEBUG_CSV_PATH}")
-        debug_dir = os.path.dirname(DEBUG_CSV_PATH)
-        if debug_dir and not os.path.exists(debug_dir):
-            os.makedirs(debug_dir, exist_ok=True)
-            print(f"[DEBUG CSV] created directory: {debug_dir}")
+        desktop = os.path.dirname(DEBUG_CSV_PATH)
+        print(f"[DEBUG CSV] desktop dir: {desktop}")
+        print(f"[DEBUG CSV] desktop exists: {os.path.exists(desktop)}")
         if not os.path.exists(DEBUG_CSV_PATH):
             with open(DEBUG_CSV_PATH, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=DEBUG_CSV_COLUMNS)
                 writer.writeheader()
-            print(f"[DEBUG CSV] created {DEBUG_CSV_PATH}")
+            print(f"[DEBUG CSV] created successfully")
         else:
-            print(f"[DEBUG CSV] already exists: {DEBUG_CSV_PATH}")
+            print(f"[DEBUG CSV] already exists")
     except Exception as e:
-        print(f"[DEBUG CSV] init failed: {e}")
+        print(f"[DEBUG CSV] INIT FAILED: {e}")
 
 def _debug_csv_row(
     event_code="",
@@ -205,7 +197,6 @@ def _debug_csv_row(
         with open(DEBUG_CSV_PATH, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=DEBUG_CSV_COLUMNS)
             writer.writerow(row)
-        print(f"[DEBUG CSV] wrote row to {DEBUG_CSV_PATH}: {event_code}")
     except Exception as e:
         print(f"[DEBUG CSV] write failed: {e}")
 
